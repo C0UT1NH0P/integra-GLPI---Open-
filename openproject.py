@@ -1,6 +1,8 @@
 # Funções de atualização dos campos personalizados de status para projetos
 # e pacotes de trabalho, e prioridade para pacotes de trabalho na API do Openproject.
 
+# Futuramente, expandir para todas as funções que manipulam o OpenProject
+
 import os
 import requests
 from dotenv import load_dotenv
@@ -31,7 +33,7 @@ def atualizar_status_projeto(id__projeto, id__status):
 
     Args:
         id__projeto (int): ID do projeto no OpenProject
-        id__status (int): ID do status de acordo com a lista: [ 7 - Novo, 8 - Em Andamento, 9 - Aguardando, 10 - Resolvido ]
+        id__status (int): ID do status de acordo com a lista: [ 7 - Novo, 8 - Em Atendimento (atribuído), 9 - Em Atendimento (planejado), 10 - Pendente, 17 - Solucionado, 18 - Fechado ]
         
     Returns:
         int: Status code da resposta da API do OpenProject
@@ -57,7 +59,7 @@ def atualizar_status_pacote_de_trabalho(id__pacote_de_trabalho, id__status):
 
     Args:
         id__pacote_de_trabalho (int): ID do pacote de trabalho no OpenProject
-        id__status (int): ID do status de acordo com a lista: [ 11 - Novo, 12 - Em Andamento, 13 - Aguardando, 14 - Resolvido ]
+        id__status (int): ID do status de acordo com a lista: [ 11 - Novo, 12 - Em Atendimento (atribuído), 13 - Em Atendimento (planejado), 14 - Pendente, 15 - Solucionado, 16 - Fechado ]
         
     Returns:
         int: Status code da resposta da API do OpenProject

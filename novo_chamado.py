@@ -1,6 +1,7 @@
+# Webhook GLPI e Categorização de Chamados para Integração com OpenProject
+
 import logging
-from datetime import datetime
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uvicorn
 import os
@@ -9,6 +10,7 @@ from bs4 import BeautifulSoup
 import base64
 import httpx
 import requests
+import json
 
 load_dotenv(override=True) 
 
