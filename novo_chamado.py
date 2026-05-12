@@ -203,17 +203,6 @@ def create_work_package(project_id, subject, priority, description="", type_id=N
             print(f"Detalhes do erro do servidor: {e.response.text}")
         return None
 
-
-@app.api_route('/teste', methods=['GET', 'POST'])
-async def tudo(request: Request):
-    data = await request.json()
-    print(data)
-    
-    if data is None:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON or no JSON received"})
-        
-    return jsonify("OK"), 200
-
 def initSession():
     """Recebe username/password, valida na API GLPI via HTTP Basic Auth e retorna a sessão GLPI."""
 
