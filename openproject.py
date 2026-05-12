@@ -88,7 +88,7 @@ def atualizar_prioridade_pacote_de_trabalho(id__pacote_de_trabalho, id__priorida
 
     Args:
         id__pacote_de_trabalho (int): ID do pacote de trabalho
-        id__prioridade (int): ID da prioridade de acordo com a lista:[ 7 - Baixa, 8 - Normal, 9 - Alta, 10 - Imediata ] 
+        id__prioridade (int): ID da prioridade de acordo com a lista:[ 16 - Muito Baixa, 7 - Baixa, 8 - Média, 9 - Alta, 15 - Muito Alta, 10 - Crítica ] 
         
     Returns:
         int: Status code da resposta da API do OpenProject
