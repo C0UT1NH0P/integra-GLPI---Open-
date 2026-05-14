@@ -13,6 +13,7 @@ import requests
 import pymysql
 import re
 import unicodedata
+import glpi
 
 load_dotenv(override=True) 
 
@@ -470,16 +471,20 @@ def create_project(name, identifier, description="", public=False, active=True, 
         data = response.json()
         project_id = data.get('id')
     
-        users = [4, 6, ]
+        users = [4, 6]
         for user_id in users:
+            "Adiciona os tecnicos como membros do projeto"
             add_project_member(project_id, user_id, 3) # adiciona como membro do projeto 
+
 
         user_adm = [11]
         for user_id in user_adm:
+            "Adiciona o administrador do projeto"
             add_project_member(project_id, user_id, 5) # adiciona como administrador do projeto
 
         user_group = [10]
         for user_id in user_group:
+            "Adiciona o grupo IA no projeto para filtros de atualizações"
             add_project_group(project_id, user_id, 3) # adiciona como membro do projeto
         
         print(f"Sucesso! Projeto criado com ID: {project_id}")
@@ -1194,6 +1199,135 @@ async def webhook(request: Request):
 
     kill_glpi_api_session(session_token)
     return {"status": "OK"}
+
+
+### Parte do COigo do Gabriel em que Recebe Post do Open project de priridade mudada e adiciona a nova prioridade no banco de dados e atualiza o GLPI
+
+def membership_tem_grupo(membership_data: dict, grupo_alvo: str) -> bool:
+    if membership_data is None:
+        return False
+
+    def busca_recursiva(valor) -> bool:
+        if isinstance(valor, dict):
+            return any(busca_recursiva(v) for v in valor.values())
+        if isinstance(valor, list):
+            return any(busca_recursiva(item) for item in valor)
+        if isinstance(valor, str):
+            return grupo_alvo in valor
+        return False
+
+    return busca_recursiva(membership_data)
+
+@app.api_route('/api/', methods=['GET', 'POST'])
+async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
+    """Endpoint que recebe o webhook de atualização de pacote de trabalho do OpenProject. Avalia a prioridade no OpenProject e compara com o GLPI, se for diferente, atualiza no banco de dados e na API do GLPI.
+
+    Returns:
+        400: O tipo (work_package, project, ...) não é suportado.
+        200: OK.
+    """    
+    try:
+        data = await request.json()
+    except Exception:
+        data = None
+
+    print(data)
+    if data is None:
+        return JSONResponse(content={"error": "Invalid JSON or no JSON received"}, status_code=400)
+    
+    tipo_op = data.get("action").split(":")[0].strip()
+    
+    membership_href = data.get("work_package").get("_embedded").get("project").get("_links").get("memberships").get("href")
+    url = f"{OPENPROJECT_URL}{membership_href}"
+
+    membership = requests.get(url, auth=('apikey', API_KEY))
+    membership_data = membership.json() if membership.ok else None
+
+    possui_inteligencia_artificial = membership_tem_grupo(membership_data, "Inteligência Artificial")
+    print(f"Membership possui Inteligência Artificial: {possui_inteligencia_artificial}")
+    if not possui_inteligencia_artificial:
+        return JSONResponse(content="OK", status_code=200)
+    
+        
+    match tipo_op:
+        case "work_package":    
+            priority__id = data.get("work_package").get("_embedded").get("priority").get("id")
+            
+            work_package_id = data.get("work_package").get("id")
+                        
+            query = "SELECT " \
+                    "prioridade_op " \
+                "FROM " \
+                    "integracao_chamados " \
+                "WHERE " \
+                    "id_op = %s " \
+                    f"AND tipo_op = '{tipo_op}' "
+            
+            insert_query = """
+                INSERT INTO integracao_chamados (id_op, tipo_op, prioridade_op)
+                VALUES (%s, 'work_package', %s)
+            """
+            
+            update_query = """
+                UPDATE integracao_chamados
+                SET prioridade_op = %s
+                WHERE id_op = %s AND tipo_op = 'work_package'
+            """
+            
+            chamado_id_query = "select id_glpi from integracao_chamados where id_op = %s and tipo_op = 'work_package'"
+            
+            with pymysql.connect(
+                host=HOST_MYSQL,
+                port=int(PORT_MYSQL),
+                user=USER_MYSQL,
+                password=PASS_MYSQL,
+                database=SCHEMA_MYSQL
+            ) as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(query, (work_package_id,))
+                    result = cursor.fetchone()
+                    print(result)
+                    if result:
+                        prioridade_op = result[0]
+                        print(f"Prioridade OP: {prioridade_op}")
+                        if prioridade_op != priority__id:
+                            cursor.execute(update_query, (priority__id, work_package_id))
+                            conn.commit()
+                            # Atualizar o chamado na API do GLPI
+
+                            # [ 1 - Muito Baixa, 2 - Baixa, 3 - Média, 4 - Alta, 5 - Muito Alta, 6 - Crítica ] -- IDS Prioridade GLPI
+                            # [ 16 - Muito Baixa, 7 - Baixa, 8 - Média, 9 - Alta, 15 - Muito Alta, 10 - Crítica ] -- IDS Prioridade OpenProject
+                            priority_map_op_to_glpi = {
+                                16: 1,  # Muito Baixa
+                                7: 2,   # Baixa
+                                8: 3,   # Média
+                                9: 4,   # Alta
+                                15: 5,  # Muito Alta
+                                10: 6,  # Crítica
+                            }
+
+                            id_chamado = cursor.execute(chamado_id_query, (work_package_id,))
+                            id_chamado = cursor.fetchone()[0]
+                            print(f"ID do chamado no GLPI: {id_chamado}")
+
+                            prioridade_glpi = priority_map_op_to_glpi.get(priority__id)
+                            if prioridade_glpi is None:
+                                print(f"Prioridade OP sem mapeamento: {priority__id}")
+                            else:
+                                response = glpi.update_ticket_priority(id_chamado, prioridade_glpi)
+                            
+                            print(f"Prioridade OP atualizada: {priority__id}")
+                        else:
+                            print("Prioridade OP não alterada")
+                    # else:
+                    #     cursor.execute(insert_query, (work_package_id, priority__id))
+                    #     conn.commit()
+                    #     print(f"Prioridade OP inserida: {priority__id}")  
+                        
+        case _:
+            return JSONResponse(content={"error": "Tipo não suportado"}, status_code=400)
+        
+    return JSONResponse(content="OK", status_code=200)
 
 if __name__ == '__main__':
     uvicorn.run("novo_chamado:app", host='0.0.0.0', port=30112, reload=True)
