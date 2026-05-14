@@ -118,9 +118,25 @@ A aplicação utiliza um banco de dados MySQL para rastrear o andamento da integ
 
 ---
 
-## 5. Dicas para Manutenção
+## 5. Sincronização de Prioridades (OpenProject -> GLPI)
+
+Além do fluxo principal (`novo_chamado.py`), a integração possui uma automação complementar para manter as prioridades sincronizadas. Quando a prioridade de um pacote de trabalho é alterada no OpenProject, essa mudança reflete automaticamente no chamado original do GLPI. Isso é gerenciado pelos arquivos:
+
+1. **`webhook_op.py`**:
+   * Uma aplicação em **Flask** que recebe os webhooks do OpenProject na rota `POST /api/`.
+   * Verifica o payload recebido e identifica se houve alteração na prioridade do pacote de trabalho.
+   * Consulta o banco de dados `integracao_chamados` pelo `id_op` para encontrar o chamado correspondente no GLPI (`id_glpi`).
+   * Traduz a escala de prioridade do OpenProject para os IDs correspondentes da escala de prioridades do GLPI.
+
+2. **`glpi.py`**:
+   * Módulo auxiliar que concentra as funções de comunicação com a API do GLPI.
+   * Quando o `webhook_op.py` detecta e traduz uma mudança de prioridade, ele invoca a função `update_ticket_priority(ticket_id, prioridade_id)` contida neste arquivo.
+   * Esta função autentica no GLPI via `initSession()` e atualiza a prioridade do chamado em tempo real através de requisições `PATCH`.
+
+---
+
+## 6. Dicas para Manutenção
 
 1. **Testando o Webhook Localmente**: Se for testar a integração localmente, recomenda-se utilizar o Ngrok (`ngrok http 30112`) para expor a aplicação local à internet para que o GLPI consiga enviar os webhooks.
 2. **Banco de Dados**: Verifique se a tabela `integracao_chamados` foi criada corretamente no seu banco MySQL, caso contrário, erros de `UPDATE/INSERT` ocorrerão (veja os arquivos de schema se disponíveis ou o método `salvar_erro_banco`).
 3. **Mapeamento de Usuários**: No arquivo `novo_chamado.py`, existe um dicionário fixo mapeando usuários (`USERS_MAP`), bem como as filas estáticas (`fila_tecnicos`). Caso um novo colaborador entre na equipe, esse trecho no código precisa ser atualizado com o ID correspondente do usuário no OpenProject.
-4. **Exportar para PDF**: Este arquivo está formatado com Markdown amigável a exportadores de PDF. Use plugins do VS Code (como o *Markdown PDF*) ou extensões do Chrome para salvar este README com um design limpo e estruturado.
