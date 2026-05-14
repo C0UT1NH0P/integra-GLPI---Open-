@@ -53,11 +53,10 @@ def get_ticket(session_token, ticket_id):
        print(response.status_code)
 
 
-def update_ticket_priority(session_token, ticket_id, prioridade_id):
+def update_ticket_priority(ticket_id, prioridade_id):
     """Atualiza a prioridade de um chamado no GLPI
 
     Args:
-        session_token (str): token de sessão para autenticação na API do GLPI  
         ticket_id (int): ID do chamado no GLPI
         prioridade_id (int): ID da prioridade de acordo com a lista: [ 1 - Muito Baixa, 2 - Baixa, 3 - Média, 4 - Alta, 5 - Muito Alta, 6 - Crítica ]
         
@@ -67,38 +66,28 @@ def update_ticket_priority(session_token, ticket_id, prioridade_id):
         400 (Bad Request) with a message indicating an error in input parameter.
         401 (UNAUTHORIZED).
     """    
-    headers = {
-        "Session-Token": f"{session_token}",
-        "App-Token": f"{os.getenv('GLPI_APP_TOKEN')}",
-        "Content-Type": "application/json"
-    }
-    
-    url = f"{GLPI_API_BASE_URL}/Ticket/{ticket_id}"
-    
-    input_data = {
-        "input": {
-            "priority": prioridade_id
-        }
-    }
-    
-    response = requests.patch(url, headers=headers, json=input_data)
-    response.raise_for_status()
-    
-    try:
-        print(response.json())
-    except:
-        print(response.status_code)
-
-
-def main():
     try:
         session_token = init_glpi_api_session()
+        headers = {
+            "Session-Token": f"{session_token}",
+            "App-Token": f"{os.getenv('GLPI_APP_TOKEN')}",
+            "Content-Type": "application/json"
+        }
         
-        update_ticket_priority(session_token, 12518, 1)
+        url = f"{GLPI_API_BASE_URL}/Ticket/{ticket_id}"
         
+        input_data = {
+            "input": {
+                "priority": prioridade_id
+            }
+        }
+        
+        response = requests.patch(url, headers=headers, json=input_data)
+        
+        response.raise_for_status()
+        
+        return response
+    
     finally:
         # Kill the session when done
         kill_glpi_api_session(session_token)
-
-if __name__ == '__main__':
-    main()
