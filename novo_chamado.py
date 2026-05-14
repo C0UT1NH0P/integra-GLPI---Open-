@@ -1152,5 +1152,5 @@ async def webhook(request: Request):
     return {"status": "OK"}
 
 if __name__ == '__main__':
-    
+    # teste 
     uvicorn.run("novo_chamado:app", host='0.0.0.0', port=30112, reload=True)
