@@ -350,6 +350,39 @@ def add_project_member(project_id, user_id, role_id):
             print(f"Detalhes: {e.response.text}")
         return None
 
+def add_project_group(project_id, user_id, role_id):
+    """
+    Adiciona um usuário a um projeto no OpenProject com um cargo específico.
+    
+    Parâmetros:
+    - project_id (int): O ID do projeto.
+    - user_id (int): O ID do usuário (ex: 6 para Pedro, 3 para Gabriel, 10 para IA).
+    - role_id (int): O ID do cargo a ser atribuído (ex: 3, 4, 8 - depende da sua configuração).
+    """
+    url = f"{OPENPROJECT_URL}/api/v3/memberships"
+    headers = {"Content-Type": "application/json"}
+    
+    payload = {
+        "_links": {
+            "project": {"href": f"/api/v3/projects/{project_id}"},
+            "principal": {"href": f"/api/v3/groups/{user_id}"},
+            "roles": [
+                {"href": f"/api/v3/roles/{role_id}"}
+            ]
+        }
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, auth=('apikey', API_KEY))
+        response.raise_for_status()
+        print(f"Usuário ID {user_id} adicionado ao projeto {project_id} com sucesso!")
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        print(f"Erro ao adicionar usuário {user_id}: {e}")
+        if e.response is not None and e.response.text:
+            print(f"Detalhes: {e.response.text}")
+        return None
+
 def criar_identificador_valido(texto):
     """
     Transforma um texto comum em um identificador válido para o OpenProject.
@@ -418,6 +451,7 @@ def create_project(name, identifier, description="", public=False, active=True, 
             "href": f"/api/v3/projects/{parent_id}"
         }
 
+
     # Se houver links a serem adicionados, insere no payload
     if _links:
         payload["_links"] = _links
@@ -436,13 +470,17 @@ def create_project(name, identifier, description="", public=False, active=True, 
         data = response.json()
         project_id = data.get('id')
     
-        users = [4, 6]
+        users = [4, 6, ]
         for user_id in users:
             add_project_member(project_id, user_id, 3) # adiciona como membro do projeto 
 
         user_adm = [11]
         for user_id in user_adm:
             add_project_member(project_id, user_id, 5) # adiciona como administrador do projeto
+
+        user_group = [10]
+        for user_id in user_group:
+            add_project_group(project_id, user_id, 3) # adiciona como membro do projeto
         
         print(f"Sucesso! Projeto criado com ID: {project_id}")
         print(f"Link: {OPENPROJECT_URL}/projects/{identifier}")
@@ -570,15 +608,6 @@ def create_work_package(project_id, subject, priority, description="", type_id=N
             "href": f"/api/v3/types/{type_id}"
         }
 
-    _links['principal'] = {
-        "href": f"/api/v3/groups/{os.getenv('GLPI_USER_GROUP_ID', '11')}"
-    }
-
-    _links['roles'] = [
-        {
-            "href": f"/api/v3/roles/{os.getenv('GLPI_USER_ROLE_ID', '4')}"
-        }
-    ]
     
     USERS_MAP = {
         "gabriel_brito": 4,
@@ -717,16 +746,18 @@ def create_work_package(project_id, subject, priority, description="", type_id=N
             print(f"Detalhes do erro do servidor: {e.response.text}")
         return None
 
+def kill_glpi_api_session(session_token):
+   headers = {
+      "Session-Token": f"{session_token}",
+      "App-Token": f"{os.getenv('GLPI_APP_TOKEN')}",
+      "Content-Type": "application/json"
+   }
 
-@app.api_route('/teste', methods=['GET', 'POST'])
-async def tudo(request: Request):
-    data = await request.json()
-    print(data)
-    
-    if data is None:
-        return JSONResponse(status_code=400, content={"error": "Invalid JSON or no JSON received"})
-        
-    return jsonify("OK"), 200
+   url = f"{os.getenv('GLPI_API_BASE_URL')}/killSession"
+
+   response = requests.request("GET", url, headers=headers)
+   
+   return response.status_code    
 
 def initSession():
     """Recebe username/password, valida na API GLPI via HTTP Basic Auth e retorna a sessão GLPI."""
@@ -877,6 +908,8 @@ async def webhook(request: Request):
             return
 
         print(f"📋 Chamado {ticket_id} - {len(anexos)} anexo(s) encontrado(s)")
+
+
 
         if anexos and len(anexos) > 0:
             pasta_anexos = os.path.join(BASE_DIR, "anexos", str(ticket_id))
@@ -1159,6 +1192,7 @@ async def webhook(request: Request):
 
         print("--------------------------------------------------\n")
 
+    kill_glpi_api_session(session_token)
     return {"status": "OK"}
 
 if __name__ == '__main__':
