@@ -88,7 +88,6 @@ def update_ticket_priority(session_token, ticket_id, prioridade_id):
         print(response.json())
     except:
         print(response.status_code)
-    # return response
 
 
 def main():

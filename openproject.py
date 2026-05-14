@@ -109,5 +109,10 @@ def atualizar_prioridade_pacote_de_trabalho(id__pacote_de_trabalho, id__priorida
     response = requests.patch(url, json=data, auth=('apikey', TOKEN))
     
     response.raise_for_status()
-    
+    try:
+        print(response.json())
+    except:
+        print(response.text)
+        print(response.status_code)
+        
     return response.status_code
