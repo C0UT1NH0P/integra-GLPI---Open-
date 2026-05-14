@@ -234,7 +234,7 @@ def handle_glpi_webhook():
         session_token = init_glpi_api_session()
         
         # Passe o id diretamente (antes estava sendo passado como set `{id}` o que causa erro de serialização)
-        adicionar_comentario_chamado_glpi(session_token, data.get('ticket').get('id'), mensagem_glpi)
+        # adicionar_comentario_chamado_glpi(session_token, data.get('ticket').get('id'), mensagem_glpi)
 
         kill_glpi_api_session(session_token)
         
