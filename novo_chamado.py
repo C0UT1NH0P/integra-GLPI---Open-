@@ -570,6 +570,16 @@ def create_work_package(project_id, subject, priority, description="", type_id=N
             "href": f"/api/v3/types/{type_id}"
         }
 
+    _links['principal'] = {
+        "href": f"/api/v3/groups/{os.getenv('GLPI_USER_GROUP_ID', '11')}"
+    }
+
+    _links['roles'] = [
+        {
+            "href": f"/api/v3/roles/{os.getenv('GLPI_USER_ROLE_ID', '4')}"
+        }
+    ]
+    
     USERS_MAP = {
         "gabriel_brito": 4,
         "pedro_coutinho": 6

@@ -2,14 +2,12 @@
 
 Esta documentação fornece as instruções necessárias para entender, configurar e executar a aplicação de integração entre o sistema de chamados GLPI e o gerenciador de projetos OpenProject.
 
----
-
 ## 1. Visão Geral
 
-O arquivo principal da aplicação é o `novo_chamado.py`. Ele consiste em uma API construída com o framework **FastAPI** que atua como um *webhook* para o GLPI. 
+O arquivo principal da aplicação é o `novo_chamado.py`. Ele consiste em uma API construída com o framework **FastAPI** que atua a partir de um *webhook* do GLPI. 
 
 **Fluxo Principal de Funcionamento (`novo_chamado.py`):**
-1. O GLPI envia um payload (JSON) para a rota `/webhook` da aplicação toda vez que um chamado é criado ou atualizado (dependendo da configuração do webhook no GLPI).
+1. O GLPI envia um payload (JSON) para a rota `/webhook` da aplicação toda vez que um chamado é criado da categoria de IA.
 2. A aplicação processa esses dados e verifica regras de negócio para decidir se:
    - Cria um **Novo Projeto** no OpenProject (com pacotes de trabalho padrão, como "Termo de Abertura", "Levantamento de Requisitos", etc.).
    - Cria um **Pacote de Trabalho (Work Package)** associado a um projeto já existente.
@@ -95,7 +93,32 @@ Você verá no console a indicação de que o servidor iniciou:
 
 ---
 
-## 4. Dicas para Manutenção
+## 4. Estrutura do Banco de Dados
+
+A aplicação utiliza um banco de dados MySQL para rastrear o andamento da integração e gerenciar a fila de atribuição (FIFO) dos pacotes de trabalho. A tabela principal `integracao_chamados` foi modelada com a seguinte estrutura (conforme o `schema.sql`):
+
+| Coluna | Tipo | Descrição |
+| :--- | :--- | :--- |
+| `id` | INT (PK) | Identificador único do registro. |
+| `id_glpi` | INT | ID do chamado original no GLPI. |
+| `solicitante_id` | INT | ID do autor no GLPI. |
+| `solicitante_nome` | VARCHAR(255) | Nome do autor no GLPI. |
+| `tipo_demanda` | VARCHAR(100) | Tipo da demanda (Ex: 'Melhoria de Sistemas', 'Correção'). |
+| `urgencia` | VARCHAR(50) | Urgência da demanda (Ex: 'Alta', 'Baixa'). |
+| `eh_novo_projeto` | BOOLEAN | Decisão do script: `TRUE` = Novo Projeto, `FALSE` = Work Package. |
+| `id_op` | INT | ID correspondente no OpenProject (pode ser NULL se der erro na criação). |
+| `tipo_op` | VARCHAR(50) | Tipo criado no OpenProject (`work_package` ou `project`). |
+| `categoria_op` | VARCHAR(100) | Categoria mapeada (Ex: 'Bug', 'Funcionalidade', 'Tarefa'). |
+| `prioridade_op` | INT | Nível de prioridade mapeado pelo script (ex: 1, 2, 3, 4). |
+| `atribuido_op` | INT | ID do usuário atribuído no OpenProject (usado pela lógica FIFO). |
+| `status_integracao` | VARCHAR(50) | Controle de execução: `pendente`, `sucesso`, ou `erro`. |
+| `mensagem_erro` | TEXT | Log de erros de requisição (Ex: 400 Bad Request) ou exceções locais. |
+| `criado_em` | TIMESTAMP | Data/Hora da criação do registro (Automático). |
+| `atualizado_em` | TIMESTAMP | Data/Hora da última atualização do registro (Automático). |
+
+---
+
+## 5. Dicas para Manutenção
 
 1. **Testando o Webhook Localmente**: Se for testar a integração localmente, recomenda-se utilizar o Ngrok (`ngrok http 30112`) para expor a aplicação local à internet para que o GLPI consiga enviar os webhooks.
 2. **Banco de Dados**: Verifique se a tabela `integracao_chamados` foi criada corretamente no seu banco MySQL, caso contrário, erros de `UPDATE/INSERT` ocorrerão (veja os arquivos de schema se disponíveis ou o método `salvar_erro_banco`).
