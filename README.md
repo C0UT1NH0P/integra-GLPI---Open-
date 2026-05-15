@@ -89,6 +89,7 @@ Você verá no console a indicação de que o servidor iniciou:
 
 **Rotas Principais:**
 * `POST /webhook`: Endpoint que o GLPI deve chamar para enviar os dados dos chamados.
+* `POST /api/`: Endpoint que recebe os webhooks do OpenProject (ex: sincronização de prioridade).
 * `GET /teste` ou `POST /teste`: Rota genérica para validação rápida se a API está online.
 
 ---
@@ -120,18 +121,18 @@ A aplicação utiliza um banco de dados MySQL para rastrear o andamento da integ
 
 ## 5. Sincronização de Prioridades (OpenProject -> GLPI)
 
-Além do fluxo principal (`novo_chamado.py`), a integração possui uma automação complementar para manter as prioridades sincronizadas. Quando a prioridade de um pacote de trabalho é alterada no OpenProject, essa mudança reflete automaticamente no chamado original do GLPI. Isso é gerenciado pelos arquivos:
+A integração possui uma automação para manter as prioridades sincronizadas. Quando a prioridade de um pacote de trabalho é alterada no OpenProject, essa mudança reflete automaticamente no chamado original do GLPI. Essa lógica está centralizada na mesma aplicação:
 
-1. **`webhook_op.py`**:
-   * Uma aplicação em **Flask** que recebe os webhooks do OpenProject na rota `POST /api/`.
-   * Verifica o payload recebido e identifica se houve alteração na prioridade do pacote de trabalho.
-   * Consulta o banco de dados `integracao_chamados` pelo `id_op` para encontrar o chamado correspondente no GLPI (`id_glpi`).
-   * Traduz a escala de prioridade do OpenProject para os IDs correspondentes da escala de prioridades do GLPI.
+1. **`novo_chamado.py` (Rota `/api/`)**:
+  * A aplicação recebe os webhooks do OpenProject na rota `POST /api/`.
+  * Verifica o payload recebido e identifica se houve alteração na prioridade do pacote de trabalho.
+  * Consulta o banco de dados `integracao_chamados` pelo `id_op` para encontrar o chamado correspondente no GLPI (`id_glpi`).
+  * Traduz a escala de prioridade do OpenProject para os IDs correspondentes da escala de prioridades do GLPI.
 
 2. **`glpi.py`**:
-   * Módulo auxiliar que concentra as funções de comunicação com a API do GLPI.
-   * Quando o `webhook_op.py` detecta e traduz uma mudança de prioridade, ele invoca a função `update_ticket_priority(ticket_id, prioridade_id)` contida neste arquivo.
-   * Esta função autentica no GLPI via `initSession()` e atualiza a prioridade do chamado em tempo real através de requisições `PATCH`.
+  * Módulo auxiliar que concentra as funções de comunicação com a API do GLPI.
+  * Quando o webhook detecta e traduz uma mudança de prioridade, ele invoca a função `update_ticket_priority(ticket_id, prioridade_id)` contida neste arquivo.
+  * Esta função autentica no GLPI via `initSession()` e atualiza a prioridade do chamado em tempo real através de requisições `PATCH`.
 
 ---
 

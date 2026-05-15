@@ -52,8 +52,8 @@ api_handler = logging.FileHandler(os.path.join(LOGS_DIR, 'api.log'), encoding='u
 error_handler = logging.FileHandler(os.path.join(LOGS_DIR, 'error.log'), encoding='utf-8')
 error_handler.setLevel(logging.ERROR)
 
-# antes verificar se api.log, error.log e chamaados_dados.log existem, se não existir criar os arquivos
-for log_file in ['api.log', 'error.log', 'chamados_dados.log']:
+# antes verificar se api.log, error.log, chamaados_dados.log e webhook_op.log existem, se não existir criar os arquivos
+for log_file in ['api.log', 'error.log', 'chamados_dados.log', 'webhook_op.log']:
     log_path = os.path.join(LOGS_DIR, log_file)
     if not os.path.exists(log_path):
         with open(log_path, 'w') as f:
@@ -75,6 +75,14 @@ dados_handler = logging.FileHandler(os.path.join(LOGS_DIR, 'chamados_dados.log')
 dados_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
 dados_logger.addHandler(dados_handler)
 dados_logger.propagate = False
+
+# Logger específico para o webhook_op
+webhook_logger = logging.getLogger('webhook_op')
+webhook_logger.setLevel(logging.INFO)
+webhook_handler = logging.FileHandler(os.path.join(LOGS_DIR, 'webhook_op.log'), encoding='utf-8')
+webhook_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+webhook_logger.addHandler(webhook_handler)
+webhook_logger.propagate = False
 
 DESCRICAO_ABERTURA = """**Definição:** Um documento de 1-2 páginas que autoriza o projeto. É o "contrato" inicial entre quem pede e quem faz.
 
@@ -1231,7 +1239,7 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
     except Exception:
         data = None
 
-    print(data)
+    webhook_logger.info(f"Dados recebidos no webhook_op: {data}")
     if data is None:
         return JSONResponse(content={"error": "Invalid JSON or no JSON received"}, status_code=400)
     
@@ -1244,7 +1252,7 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
     membership_data = membership.json() if membership.ok else None
 
     possui_inteligencia_artificial = membership_tem_grupo(membership_data, "Inteligência Artificial")
-    print(f"Membership possui Inteligência Artificial: {possui_inteligencia_artificial}")
+    webhook_logger.info(f"Membership possui Inteligência Artificial: {possui_inteligencia_artificial}")
     if not possui_inteligencia_artificial:
         return JSONResponse(content="OK", status_code=200)
     
@@ -1286,10 +1294,10 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
                 with conn.cursor() as cursor:
                     cursor.execute(query, (work_package_id,))
                     result = cursor.fetchone()
-                    print(result)
+                    webhook_logger.info(f"Resultado da query para {work_package_id}: {result}")
                     if result:
                         prioridade_op = result[0]
-                        print(f"Prioridade OP: {prioridade_op}")
+                        webhook_logger.info(f"Prioridade OP atual no banco: {prioridade_op}")
                         if prioridade_op != priority__id:
                             cursor.execute(update_query, (priority__id, work_package_id))
                             conn.commit()
@@ -1308,21 +1316,18 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
 
                             id_chamado = cursor.execute(chamado_id_query, (work_package_id,))
                             id_chamado = cursor.fetchone()[0]
-                            print(f"ID do chamado no GLPI: {id_chamado}")
+                            webhook_logger.info(f"ID do chamado no GLPI: {id_chamado}")
 
                             prioridade_glpi = priority_map_op_to_glpi.get(priority__id)
                             if prioridade_glpi is None:
-                                print(f"Prioridade OP sem mapeamento: {priority__id}")
+                                webhook_logger.warning(f"Prioridade OP sem mapeamento no GLPI: {priority__id}")
                             else:
                                 response = glpi.update_ticket_priority(id_chamado, prioridade_glpi)
                             
-                            print(f"Prioridade OP atualizada: {priority__id}")
+                            webhook_logger.info(f"Prioridade OP atualizada para: {priority__id}")
                         else:
-                            print("Prioridade OP não alterada")
-                    # else:
-                    #     cursor.execute(insert_query, (work_package_id, priority__id))
-                    #     conn.commit()
-                    #     print(f"Prioridade OP inserida: {priority__id}")  
+                            webhook_logger.info("Prioridade OP não alterada")
+
                         
         case _:
             return JSONResponse(content={"error": "Tipo não suportado"}, status_code=400)
