@@ -65,6 +65,7 @@ formatter = logging.Formatter('%(asctime)s - %(message)s')
 api_handler.setFormatter(formatter)
 error_handler.setFormatter(formatter)
 
+logger.handlers.clear()
 logger.addHandler(api_handler)
 logger.addHandler(error_handler)
 
@@ -73,6 +74,7 @@ dados_logger = logging.getLogger('dados_chamado')
 dados_logger.setLevel(logging.INFO)
 dados_handler = logging.FileHandler(os.path.join(LOGS_DIR, 'chamados_dados.log'), encoding='utf-8')
 dados_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+dados_logger.handlers.clear()
 dados_logger.addHandler(dados_handler)
 dados_logger.propagate = False
 
@@ -81,6 +83,7 @@ webhook_logger = logging.getLogger('webhook_op')
 webhook_logger.setLevel(logging.INFO)
 webhook_handler = logging.FileHandler(os.path.join(LOGS_DIR, 'webhook_op.log'), encoding='utf-8')
 webhook_handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
+webhook_logger.handlers.clear()
 webhook_logger.addHandler(webhook_handler)
 webhook_logger.propagate = False
 
@@ -1294,8 +1297,9 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
                 with conn.cursor() as cursor:
                     cursor.execute(query, (work_package_id,))
                     result = cursor.fetchone()
-                    webhook_logger.info(f"Resultado da query para {work_package_id}: {result}")
+                    
                     if result:
+                        webhook_logger.info(f"Resultado da query para {work_package_id}: {result}")
                         prioridade_op = result[0]
                         webhook_logger.info(f"Prioridade OP atual no banco: {prioridade_op}")
                         if prioridade_op != priority__id:
@@ -1328,11 +1332,12 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
                         else:
                             webhook_logger.info("Prioridade OP não alterada")
 
-                        
+                    # else:
+                    #     webhook_logger.info(f"Resultado da query para {work_package_id}: Não está associado a um chamado")
         case _:
             return JSONResponse(content={"error": "Tipo não suportado"}, status_code=400)
         
     return JSONResponse(content="OK", status_code=200)
 
 if __name__ == '__main__':
-    uvicorn.run("novo_chamado:app", host='0.0.0.0', port=30112, reload=True)
+    uvicorn.run("novo_chamado:app", host='0.0.0.0', port=30112, reload=False)
