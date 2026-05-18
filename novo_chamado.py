@@ -535,6 +535,47 @@ def create_project(name, identifier, description="", public=False, active=True, 
         
         return None, None
 
+def contador_work_package(responsible_id):
+    """
+    Busca os pacotes de trabalho ativos de um responsável no OpenProject 
+    e retorna a quantidade e a maior data de fim (dueDate).
+    """
+    filtros = [
+        {"responsible": {"operator": "=", "values": [str(responsible_id)]}},
+        {"status": {"operator": "!", "values": ["12"]}}
+    ]
+    
+    url = f"{OPENPROJECT_URL}/api/v3/work_packages"
+    headers = {
+        "Content-Type": "application/json",
+    }
+    params = {
+        "filters": json.dumps(filtros)
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, auth=('apikey', API_KEY))
+        if response.status_code == 200:
+            data = response.json()
+            total_wps = data.get('total', 0)
+            elementos = data.get('_embedded', {}).get('elements', [])
+            
+            datas = []
+            for el in elementos:
+                start = el.get('startDate')
+                due = el.get('dueDate')
+                if start and due:
+                    datas.append({'start': start, 'due': due})
+            
+            return total_wps, datas
+        else:
+            print(f"Erro ao buscar work packages do responsável {responsible_id}: {response.status_code}")
+            return 0, []
+    except Exception as e:
+        print(f"Erro na requisição contador_work_package: {e}")
+        return 0, []
+
+
 
 def extrair_dados_de_tabela_html(html_content: str) -> dict:
     """
@@ -624,6 +665,7 @@ def create_work_package(project_id, subject, priority, description="", type_id=N
             "href": f"/api/v3/types/{type_id}"
         }
 
+
     
     USERS_MAP = {
         "gabriel_brito": 4,
@@ -670,36 +712,65 @@ def create_work_package(project_id, subject, priority, description="", type_id=N
             
     responsible_id = assignee_id
 
-    # Adicionando o Atribuído (Assignee) no OpenProject
+    # depois de saber quem será o responsavel pelo projeto preciso usando uma regra de prioridade o calculo de data inicio e fim do pacote de trabalho
 
-    if int(type_id) not in (2, 3):
-        # nãp inserir atribuido quando for apenas um pacote de trabalho padrão vindo da criação de um projeto 
-        if assignee_id:
-            _links["assignee"] = {
-                "href": f"/api/v3/users/{assignee_id}"
-            }
+    from datetime import timedelta
 
-        # Adicionando o Responsável (Responsible) no OpenProject
-        if responsible_id:
-            _links["responsible"] = {
-                "href": f"/api/v3/users/{responsible_id}"
-            }
+    quantidade_projetos, datas_projetos = contador_work_package(responsible_id)
+    
+    ultima_data_fim = None
+    if datas_projetos:
+        for d in datas_projetos:
+            if d['due']:
+                try:
+                    data_fim = datetime.strptime(d['due'], "%Y-%m-%d").date()
+                    if not ultima_data_fim or data_fim > ultima_data_fim:
+                        ultima_data_fim = data_fim
+                except ValueError:
+                    pass
+
+    hoje = datetime.now().date()
+    if ultima_data_fim and ultima_data_fim >= hoje:
+        start_date = ultima_data_fim + timedelta(days=1)
+    else:
+        start_date = hoje
+
+    duracao_dias = 7 # Normal por padrão
+    
+    if priority == 7: # Baixa
+        duracao_dias = 15
+    elif priority == 8: # Normal
+        duracao_dias = 7
+    elif priority == 9: # Alta
+        duracao_dias = 3
+    elif priority == 10: # Imediata
+        duracao_dias = 1
+        start_date = hoje # Passa na frente
+
+    if quantidade_projetos > 10 and priority < 10:
+        start_date += timedelta(days=2) # Adiciona um atraso inicial pelo excesso de carga
+
+    due_date = start_date + timedelta(days=duracao_dias)
+
+    payload["startDate"] = start_date.strftime("%Y-%m-%d")
+    payload["dueDate"] = due_date.strftime("%Y-%m-%d")
+    print(f"Data de início do work package: {start_date.strftime('%Y-%m-%d')}")
+    print(f"Data de fim do work package: {due_date.strftime('%Y-%m-%d')}")
+
+    if assignee_id:
+        _links["assignee"] = {
+            "href": f"/api/v3/users/{assignee_id}"
+        }
+
+    # Adicionando o Responsável (Responsible) no OpenProject
+    if responsible_id:
+        _links["responsible"] = {
+            "href": f"/api/v3/users/{responsible_id}"
+        }
 
     if priority:
-        
-        prioridade = 8 # Normal por padrão
-        if priority == 7:
-            prioridade = 'Baixa'
-        elif priority == 8:
-            prioridade = 'Normal'
-        elif priority == 9:
-            prioridade = 'Alta'
-        elif priority == 10:
-            prioridade = 'Imediata'
-        
         _links["priority"] = {
             "href": f"/api/v3/priorities/{priority}",
-            # "title": f"{prioridade}"
         }
 
     if _links:
@@ -861,7 +932,6 @@ async def webhook(request: Request):
                 print(f'id do chamado rejeitado {ticket_id}')
                 descricao_rejeicao = desc_aprovacao if desc_aprovacao else "Solução rejeitada pelo usuário."
 
-                               
                 try:
                     conn = pymysql.connect(
                         host=HOST_MYSQL,
@@ -924,7 +994,6 @@ async def webhook(request: Request):
             return
 
         print(f"📋 Chamado {ticket_id} - {len(anexos)} anexo(s) encontrado(s)")
-
 
 
         if anexos and len(anexos) > 0:
@@ -1141,7 +1210,7 @@ async def webhook(request: Request):
                 project_id_str = nome_sistema.split('-')[0].strip()
                 if project_id_str.isdigit():
                     project_id = int(project_id_str)
-                    subject = f"[{tipo_wp_nome}] {categoria_demanda}" if categoria_demanda != "N/A" else f"[{tipo_wp_nome}] Nova Solicitação"
+                    subject = f"{categoria_demanda}" if categoria_demanda != "N/A" else f"[{tipo_wp_nome}] Nova Solicitação"
                     
                     description = f"**Solicitante:** {nome_autor} (ID: {id_autor})\n\n"
                     description += f"**Descrição:**\n{descricao_projeto}\n\n"
@@ -1212,7 +1281,7 @@ async def webhook(request: Request):
     return {"status": "OK"}
 
 
-### Parte do COigo do Gabriel em que Recebe Post do Open project de priridade mudada e adiciona a nova prioridade no banco de dados e atualiza o GLPI
+### Parte do Gabriel em que Recebe Post do Open project de priridade mudada e adiciona a nova prioridade no banco de dados e atualiza o GLPI
 
 def membership_tem_grupo(membership_data: dict, grupo_alvo: str) -> bool:
     if membership_data is None:
@@ -1237,12 +1306,14 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
         400: O tipo (work_package, project, ...) não é suportado.
         200: OK.
     """    
+    
     try:
         data = await request.json()
     except Exception:
         data = None
 
     webhook_logger.info(f"Dados recebidos no webhook_op: {data}")
+    
     if data is None:
         return JSONResponse(content={"error": "Invalid JSON or no JSON received"}, status_code=400)
     
@@ -1258,7 +1329,6 @@ async def processar_atualizacao_de_pacote_de_trabalho(request: Request):
     webhook_logger.info(f"Membership possui Inteligência Artificial: {possui_inteligencia_artificial}")
     if not possui_inteligencia_artificial:
         return JSONResponse(content="OK", status_code=200)
-    
         
     match tipo_op:
         case "work_package":    

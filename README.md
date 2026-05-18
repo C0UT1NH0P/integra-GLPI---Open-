@@ -141,3 +141,5 @@ A integração possui uma automação para manter as prioridades sincronizadas. 
 1. **Testando o Webhook Localmente**: Se for testar a integração localmente, recomenda-se utilizar o Ngrok (`ngrok http 30112`) para expor a aplicação local à internet para que o GLPI consiga enviar os webhooks.
 2. **Banco de Dados**: Verifique se a tabela `integracao_chamados` foi criada corretamente no seu banco MySQL, caso contrário, erros de `UPDATE/INSERT` ocorrerão (veja os arquivos de schema se disponíveis ou o método `salvar_erro_banco`).
 3. **Mapeamento de Usuários**: No arquivo `novo_chamado.py`, existe um dicionário fixo mapeando usuários (`USERS_MAP`), bem como as filas estáticas (`fila_tecnicos`). Caso um novo colaborador entre na equipe, esse trecho no código precisa ser atualizado com o ID correspondente do usuário no OpenProject.
+
+

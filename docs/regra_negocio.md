@@ -108,3 +108,35 @@ O **Tipo de Work Package** gerado dependerá da Categoria selecionada no GLPI:
 
 ## 5 Regras
 - Sempre puscar o nome da pessoa que abriu o chamado e inserir na descrição do workpackage ou do projeto 
+
+## 6. Cálculo Automático de Prazos (Início e Fim)
+
+Quando um chamado validado entra como projeto/pacote de trabalho, a aplicação não define prazos arbitrários. Existe uma lógica dinâmica na API para agendar o trabalho (`startDate` e `dueDate`) baseada no volume de tarefas do técnico e na prioridade do chamado.
+
+### Fluxo de Cálculo:
+
+1. **Análise da Fila (Contador de Projetos):**
+   A aplicação realiza uma consulta (GET) no OpenProject para buscar todos os pacotes de trabalho ativos (excluindo os de status "fechado" ou "rejeitado") atribuídos ao técnico que receberá o chamado. O script extrai a maior data de conclusão (`dueDate`) atual na fila.
+
+2. **Agendamento da Data de Início (`startDate`):**
+   - **Fluxo Normal**: O novo projeto tem início agendado para o **dia subsequente** ao término da última demanda pendente do técnico.
+   - **Fila Vazia ou Atrasada**: Se o técnico estiver sem projetos pendentes, ou a maior data final for menor que o dia atual, o projeto se inicia **hoje**.
+
+3. **Gerenciamento de Carga (Gargalo de Projetos):**
+   - Para evitar sobrecarga técnica, se o técnico estiver com um excesso de chamados pendentes (neste caso, **mais de 10 projetos**), a aplicação automaticamente joga a data de início **2 dias** mais para o futuro. Isso provém uma folga para desafogar a fila (não aplicável à prioridade *Imediata*).
+
+4. **Regras baseadas em Prioridade (Duração da Tarefa):**
+   A prioridade do pacote de trabalho define o prazo em dias para o desenvolvimento:
+
+   - **Prioridade Imediata (10)**:
+     - **Duração**: 1 dia.
+     - **Regra Exceção**: Fura completamente a fila; a data de início recebe *override* para ser **hoje**, forçando prioridade máxima.
+   - **Prioridade Alta (9)**:
+     - **Duração**: 3 dias.
+   - **Prioridade Normal (8) (Padrão)**:
+     - **Duração**: 7 dias.
+   - **Prioridade Baixa (7)**:
+     - **Duração**: 15 dias.
+
+### Resultado:
+O número de dias definidos pela prioridade é somado à data de início (`startDate`) estabelecida pela fila, o que resulta na data de finalização (`dueDate`). Ambas são preenchidas nos parâmetros do Work Package gerado no OpenProject.
