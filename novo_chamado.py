@@ -34,8 +34,8 @@ OPENPROJECT_URL = os.getenv('OPENPROJECT_URL')
 # Token de acesso (Bearer Token) pegando do .env
 API_KEY = os.getenv('APIKEY_OPEN')
 
-APP_TOKEN = os.getenv("GLPI_APP_TOKEN_TESTES")
-GLPI_API_URL = os.getenv("GLPI_API_URL_TESTES")
+APP_TOKEN = os.getenv("GLPI_APP_TOKEN")
+GLPI_API_URL = os.getenv("GLPI_API_BASE_URL")
 user_glpi = os.getenv('USER_GLPI')
 pass_glpi = os.getenv('PASS_GLPI')
 
@@ -968,89 +968,90 @@ async def webhook(request: Request):
                         conn.close()
 
                 return {"status": "OK"}
-    
-    session_token = initSession()
 
-    headers = {
-        'Content-Type': 'application/json',
-        'Session-Token': f'{session_token}',
-        'App-Token': f'{APP_TOKEN}'  
-    }
+    if action == "Novo chamado" and str(title).startswith("Projeto") and category == 'Inteligência Artificial > Desenvolvimento de Soluções > Integração entre sistemas':
 
-    endpoint = f"{GLPI_API_URL}/apirest.php/Ticket/{ticket_id}/Document_Item"
-    arquivos_baixados = []
+        session_token = initSession()
 
-    try:
-        # 🔹 Faz a requisição GET para buscar os anexos do ticket
-        response = requests.get(endpoint, headers=headers)
+        headers = {
+            'Content-Type': 'application/json',
+            'Session-Token': f'{session_token}',
+            'App-Token': f'{APP_TOKEN}'  
+        }
+
+        endpoint = f"{GLPI_API_URL}/apirest.php/Ticket/{ticket_id}/Document_Item"
+        arquivos_baixados = []
 
         try:
-            anexos = response.json()
-            print(f'Anexos: {anexos}')
-        except json.JSONDecodeError as e:
-            print(f"❌ Erro ao decodificar JSON para o ticket {ticket_id}")
-            print(response.text)
-            salvar_erro_banco(ticket_id, f"Erro ao decodificar JSON dos anexos: {e}")
-            return
+            # 🔹 Faz a requisição GET para buscar os anexos do ticket
+            response = requests.get(endpoint, headers=headers)
 
-        print(f"📋 Chamado {ticket_id} - {len(anexos)} anexo(s) encontrado(s)")
+            try:
+                anexos = response.json()
+                print(f'Anexos: {anexos}')
+            except json.JSONDecodeError as e:
+                print(f"❌ Erro ao decodificar JSON para o ticket {ticket_id}")
+                print(response.text)
+                salvar_erro_banco(ticket_id, f"Erro ao decodificar JSON dos anexos: {e}")
+                return
+
+            print(f"📋 Chamado {ticket_id} - {len(anexos)} anexo(s) encontrado(s)")
 
 
-        if anexos and len(anexos) > 0:
-            pasta_anexos = os.path.join(BASE_DIR, "anexos", str(ticket_id))
-            os.makedirs(pasta_anexos, exist_ok=True)
-            
-            for item in anexos:
-                doc_id = item.get("documents_id")
-                if doc_id:
-                    # Primeiro: Buscar o NOME do arquivo na API REST
-                    meta_url = f"{GLPI_API_URL}/apirest.php/Document/{doc_id}"
-                    meta_resp = requests.get(meta_url, headers=headers)
-                    
-                    filename = f"anexo_{doc_id}" # Nome padrão caso falhe
-                    
-                    if meta_resp.status_code == 200:
-                        try:
-                            doc_info = meta_resp.json()
-                            filename = doc_info.get("filename", filename)
-                        except json.JSONDecodeError as e:
-                            print(f"⚠️ Aviso: Não foi possível ler o JSON de metadados do doc {doc_id}")
-                            salvar_erro_banco(ticket_id, f"Erro JSON metadados doc {doc_id}: {e}")
-                    
-    
-                    download_url = f"{GLPI_API_URL}/front/document.send.php?docid={doc_id}&tickets_id={ticket_id}"
-                    
-                    # Usa stream=True direto na chamada de download
-                    file_resp = requests.get(download_url, headers=headers, stream=True)
-                    
-                    if file_resp.status_code == 200:
-                        filepath = os.path.join(pasta_anexos, filename)
-                        with open(filepath, 'wb') as f:
-                            for chunk in file_resp.iter_content(chunk_size=8192):
-                                if chunk: # Filtra os keep-alive (chunks vazios)
-                                    f.write(chunk)
-                        arquivos_baixados.append(filepath)
-                        print(f"✅ Anexo baixado: {filename}")
-                    else:
-                        erro_msg = (f"❌ Erro HTTP {file_resp.status_code} ao tentar baixar o documento {doc_id}.\n"
-                                    f"   URL Tentada: {download_url}")
-                        print(erro_msg)
-                        salvar_erro_banco(ticket_id, erro_msg)
+            if anexos and len(anexos) > 0:
+                pasta_anexos = os.path.join(BASE_DIR, "anexos", str(ticket_id))
+                os.makedirs(pasta_anexos, exist_ok=True)
+                
+                for item in anexos:
+                    doc_id = item.get("documents_id")
+                    if doc_id:
+                        # Primeiro: Buscar o NOME do arquivo na API REST
+                        meta_url = f"{GLPI_API_URL}/apirest.php/Document/{doc_id}"
+                        meta_resp = requests.get(meta_url, headers=headers)
                         
-                        try:
-                            logger.error(erro_msg)
-                        except NameError:
-                            pass 
+                        filename = f"anexo_{doc_id}" # Nome padrão caso falhe
+                        
+                        if meta_resp.status_code == 200:
+                            try:
+                                doc_info = meta_resp.json()
+                                filename = doc_info.get("filename", filename)
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️ Aviso: Não foi possível ler o JSON de metadados do doc {doc_id}")
+                                salvar_erro_banco(ticket_id, f"Erro JSON metadados doc {doc_id}: {e}")
+                        
+                        download_url = f"{GLPI_API_URL}/front/document.send.php?docid={doc_id}&tickets_id={ticket_id}"
+                        
+                        # Usa stream=True direto na chamada de download
+                        file_resp = requests.get(download_url, headers=headers, stream=True)
+                        
+                        if file_resp.status_code == 200:
+                            filepath = os.path.join(pasta_anexos, filename)
+                            with open(filepath, 'wb') as f:
+                                for chunk in file_resp.iter_content(chunk_size=8192):
+                                    if chunk: # Filtra os keep-alive (chunks vazios)
+                                        f.write(chunk)
+                            arquivos_baixados.append(filepath)
+                            print(f"✅ Anexo baixado: {filename}")
+                        else:
+                            erro_msg = (f"❌ Erro HTTP {file_resp.status_code} ao tentar baixar o documento {doc_id}.\n"
+                                        f"   URL Tentada: {download_url}")
+                            print(erro_msg)
+                            salvar_erro_banco(ticket_id, erro_msg)
+                            
+                            try:
+                                logger.error(erro_msg)
+                            except NameError:
+                                pass 
 
-    except Exception as e:
-        print(f"❌ Erro ao processar anexos: {e}")
-        salvar_erro_banco(ticket_id, f"Erro ao processar anexos: {e}")
-        try:
-            logger.error(f"Erro ao processar anexos: {e}")
-        except NameError:
-            pass
+        except Exception as e:
+            print(f"❌ Erro ao processar anexos: {e}")
+            salvar_erro_banco(ticket_id, f"Erro ao processar anexos: {e}")
+            try:
+                logger.error(f"Erro ao processar anexos: {e}")
+            except NameError:
+                pass
 
-    if action == "Novo chamado" and str(title).startswith("Projeto") and category == 'IA - Integração e Automação de Sistemas > Automação':
+    if action == "Novo chamado" and str(title).startswith("Projeto") and category == 'Inteligência Artificial > Desenvolvimento de Soluções > Integração entre sistemas':
 
         colunas = extrair_dados_de_tabela_html(ticket.get('content', ''))
 
@@ -1277,8 +1278,11 @@ async def webhook(request: Request):
 
         print("--------------------------------------------------\n")
 
-    kill_glpi_api_session(session_token)
-    return {"status": "OK"}
+        kill_glpi_api_session(session_token)
+        return {"status": "OK"}
+
+    else:
+        return {"status": "Fora dos Filtros"}
 
 
 ### Parte do Gabriel em que Recebe Post do Open project de priridade mudada e adiciona a nova prioridade no banco de dados e atualiza o GLPI
